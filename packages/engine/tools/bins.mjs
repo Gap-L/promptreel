@@ -23,6 +23,9 @@ export function probe(file) {
   return { duration: +d[1] * 3600 + +d[2] * 60 + +d[3], width: v ? +v[1] : 0, height: v ? +v[2] : 0 };
 }
 
+const WIN_PROGRAM_FILES = process.env['PROGRAMFILES'] || 'C:\\Program Files';
+const WIN_PROGRAM_FILES_X86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+const WIN_LOCAL = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local');
 const CHROME_CANDIDATES = {
   darwin: [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -30,12 +33,18 @@ const CHROME_CANDIDATES = {
     '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
   ],
-  linux: ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/local/bin/chromium', '/usr/bin/microsoft-edge'],
+  linux: ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/local/bin/chromium', '/snap/bin/chromium', '/usr/bin/microsoft-edge', '/usr/bin/brave-browser'],
   win32: [
-    path.join(process.env['PROGRAMFILES'] || 'C:\\Program Files', 'Google/Chrome/Application/chrome.exe'),
-    path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Google/Chrome/Application/chrome.exe'),
-    path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Microsoft/Edge/Application/msedge.exe'),
-    path.join(os.homedir(), 'AppData/Local/Google/Chrome/Application/chrome.exe'),
+    path.join(WIN_PROGRAM_FILES, 'Google/Chrome/Application/chrome.exe'),
+    path.join(WIN_PROGRAM_FILES_X86, 'Google/Chrome/Application/chrome.exe'),
+    path.join(WIN_LOCAL, 'Google/Chrome/Application/chrome.exe'),
+    path.join(WIN_PROGRAM_FILES, 'Microsoft/Edge/Application/msedge.exe'),
+    path.join(WIN_PROGRAM_FILES_X86, 'Microsoft/Edge/Application/msedge.exe'),
+    path.join(WIN_LOCAL, 'Microsoft/Edge/Application/msedge.exe'),
+    path.join(WIN_LOCAL, 'Chromium/Application/chrome.exe'),
+    path.join(WIN_PROGRAM_FILES, 'BraveSoftware/Brave-Browser/Application/brave.exe'),
+    path.join(WIN_PROGRAM_FILES_X86, 'BraveSoftware/Brave-Browser/Application/brave.exe'),
+    path.join(WIN_LOCAL, 'BraveSoftware/Brave-Browser/Application/brave.exe'),
   ],
 };
 

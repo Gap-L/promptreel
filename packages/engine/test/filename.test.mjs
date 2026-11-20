@@ -5,7 +5,7 @@ import path from 'path';
 import { fileName } from '../tools/filename.mjs';
 
 test('a title with a slash or a colon stays one file in out/', () => {
-  const out = '/work/p/out';
+  const out = path.join('/work', 'p', 'out');   // \work\p\out on Windows: dirname compares the platform's own separators
   for (const title of ['【静帧1 / 0:00-0:12】 开场：基金到', 'Q3: costs/benefits', '../../etc/passwd', 'a\\b', 'C:\\x', 'tab\there', 'what? "why" <now> |*']) {
     const f = path.join(out, `${fileName(title)}-无字幕.mp4`);
     assert.equal(path.dirname(f), out, title);

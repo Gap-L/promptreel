@@ -213,11 +213,16 @@ function savedToken(): string {
   return t;
 }
 
-export function startServer(port = 5317, host = '127.0.0.1') {
+export async function startServer(port = 5317, host = '127.0.0.1') {
   // a failure inside one request must not take down the server and the films being made in it
   process.on('uncaughtException', (e) => console.error('[studio] unexpected error:', e));
   process.on('unhandledRejection', (e) => console.error('[studio] unhandled rejection:', e));
   const { app, token } = createServer(undefined, { token: savedToken() });
   const server = serve({ fetch: app.fetch, port, hostname: host });
+  // wait until the port is actually taken: a busy port must fail here, not print a URL that does not work
+  await new Promise<void>((resolve, reject) => {
+    server.once('listening', () => resolve());
+    server.once('error', (e) => reject(e));
+  });
   return { server, token, url: `http://${host}:${port}/?token=${token}` };
 }

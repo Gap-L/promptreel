@@ -20,7 +20,13 @@ const ENV_KEYS: Record<string, string> = {
 
 function args(argv: string[]) {
   const o: Record<string, string> = {}, pos: string[] = [];
-  for (let i = 0; i < argv.length; i++) { if (argv[i].startsWith('--')) o[argv[i].slice(2)] = argv[++i]; else pos.push(argv[i]); }
+  for (let i = 0; i < argv.length; i++) {
+    if (!argv[i].startsWith('--')) { pos.push(argv[i]); continue; }
+    const next = argv[i + 1];
+    // a flag with no value (--no-open) must not swallow the next flag (--port 5401)
+    if (next === undefined || next.startsWith('--')) o[argv[i].slice(2)] = '';
+    else { o[argv[i].slice(2)] = next; i++; }
+  }
   return { o, pos };
 }
 const sec = (t0: number) => ((Date.now() - t0) / 1000).toFixed(0).padStart(4) + 's';
@@ -76,7 +82,15 @@ async function run(argv: string[]) {
 async function serveCmd(argv: string[]) {
   const { o } = args(argv);
   const { startServer } = await import('./server.js');
-  const { url } = startServer(+(o.port || process.env.PORT || 5317));
+  const port = +(o.port || process.env.PORT || 5317);
+  let url: string;
+  try {
+    ({ url } = await startServer(port));
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error(tr(`\n  工作室启动失败：${detail}\n  如果端口 ${port} 被占用，换一个端口：promptreel serve --port 5320\n`, `\n  Could not start the studio: ${detail}\n  If port ${port} is taken, try another one: promptreel serve --port 5320\n`));
+    process.exit(1);
+  }
   console.log(tr(`\n  Promptreel 已启动\n  ${url}\n`, `\n  Promptreel is running\n  ${url}\n`));
   if (!('no-open' in o) && !process.env.NO_OPEN) {
     const { spawn } = await import('node:child_process');

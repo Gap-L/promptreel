@@ -18,6 +18,10 @@ const ROOT = path.resolve(DESKTOP, '../..');
 const RELEASE = path.join(DESKTOP, 'release');
 const APP = path.join(RELEASE, 'app');
 const pkg = JSON.parse(fs.readFileSync(path.join(DESKTOP, 'package.json'), 'utf8'));
+if (process.platform !== 'darwin') {
+  console.error('The desktop app is packaged on macOS only. On Windows or Linux, run the browser studio: node apps/cli/dist/cli.js serve');
+  process.exit(1);
+}
 // Electron downloads from GitHub; set ELECTRON_MIRROR (e.g. https://npmmirror.com/mirrors/electron/ in China) for a mirror
 const run = (cmd, args, cwd = ROOT) => execFileSync(cmd, args, { cwd, stdio: 'inherit' });
 
