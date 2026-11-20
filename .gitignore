@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.turbo/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+# local Studio data never belongs in the repo
+.promptreel/
+out/
+packages/ui/dist/
+apps/desktop/release/
+
+# design-review scratch files carry local paths
+.impeccable/critique/

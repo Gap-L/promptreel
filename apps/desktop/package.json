@@ -1,0 +1,22 @@
+{
+  "name": "@promptreel/desktop",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Promptreel for macOS and Windows: the core in Electron's main process, the panel in a window, IPC in between.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@promptreel/core": "workspace:*",
+    "@promptreel/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.16.1"
+  },
+  "productName": "Promptreel"
+}

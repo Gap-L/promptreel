@@ -1,0 +1,256 @@
+// StudioClient: everything the panel can ask of the core. In a browser it speaks HTTP + SSE to the local server; inside
+// the desktop app the preload script exposes the same methods as `window.studioBridge` over IPC.
+import { t } from '../i18n';
+import type {
+  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice, VoicesView,
+} from '@promptreel/core/types';
+
+export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice, VoicesView };
+export type ProjectView = ProjectSummary & { previewBase: string };
+
+// The film's assets (素材): @promptreel/agent's types, re-exported by the core (types only, erased from the bundle)
+import type { UserAsset, UserAssetType } from '@promptreel/core';
+export type { UserAsset, UserAssetType };
+/** one of the account's assets in a host's library (Cloud 素材库); `url` and `thumb` are URLs */
+export interface LibraryAsset { id: string; name: string; note: string; type: UserAssetType; w: number; h: number; bytes: number; url: string; thumb: string; createdAt: string }
+/** an asset given with a new film */
+export interface NewAsset { file: File; thumb?: Blob; note?: string }
+
+export interface StudioClient {
+  settings(): Promise<PublicSettings>;
+  updateSettings(patch: SettingsPatch): Promise<PublicSettings>;
+  /** the providers Studio offers, in the order it shows them */
+  providers(): Promise<ProviderSpec[]>;
+  env(): Promise<EnvCheck[]>;
+  styles(): Promise<StyleInfo[]>;
+  models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }>;
+  voices(): Promise<VoicesView>;
+  /** add a Volcengine voice by its id to 「我的音色」, checked by speaking a sample (on a hosted service, with the account's own key) */
+  addVoice?(input: { id: string; name?: string }): Promise<Voice>;
+  projects(): Promise<ProjectView[]>;
+  project(id: string): Promise<ProjectView>;
+  /** `assets`: pictures to be seen in the film (素材), each with its small copy, apart from the documents in `files` */
+  createProject(input: NewProjectInput, files: File[], assets?: NewAsset[]): Promise<ProjectView>;
+  start(id: string): Promise<void>;
+  /** `waited`: the card's countdown ran out with the panel open, not a press of the button */
+  approve(id: string, feedback?: string, o?: { waited?: 'storyboard' }): Promise<boolean>;
+  /** one of the film's generated pictures drawn again, `note` what to change: any of them while the first page waits
+   *  (it is shown again with the new one), or on a finished film. False while the film is busy. Absent
+   *  where a host can't draw pictures (the desktop bridge) */
+  redrawPicture?(id: string, picture: string, note?: string): Promise<boolean>;
+  stop(id: string): Promise<void>;
+  /** delete a project and its files; refused while it is being made */
+  deleteProject(id: string): Promise<void>;
+  /** file a project under a group on the home page ('' : none); absent where a host keeps no groups */
+  moveProject?(id: string, group: string): Promise<void>;
+  /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
+  say(id: string, text: string, refs?: UserRef[]): Promise<boolean>;
+  /** save a file the user attached to a message into the project; returns the reference to send with it */
+  attach(id: string, file: File): Promise<UserRef>;
+  /** files the user keeps to hand (a hosted service's brand kits), offered in the composer's attach menu */
+  library?(): Promise<LibraryGroup[]>;
+  /** put one of them into the project, as attach does with an uploaded file; returns the reference to send with it.
+   *  Without `asset`, the whole brand: its brief (assets/brand/brand.md) and every file, the reference naming the brief */
+  attachFrom?(projectId: string, item: { brand: string; asset?: string }): Promise<UserRef>;
+  /** the film's assets (素材), as its manifest lists them */
+  assets(id: string): Promise<UserAsset[]>;
+  /** add a picture to the film's assets (the same picture again: that one, its name and note updated); `thumb` its small copy */
+  addAsset(id: string, file: File, o?: { name?: string; note?: string; thumb?: Blob }): Promise<UserAsset>;
+  updateAsset(id: string, file: string, patch: { name?: string; note?: string }): Promise<UserAsset>;
+  /** the file, its small copy and its entry */
+  removeAsset(id: string, file: string): Promise<void>;
+  /** a host's account-wide library (Cloud 素材库); absent where there is none */
+  assetLibrary?: {
+    list(): Promise<LibraryAsset[]>;
+    add(file: File, o?: { name?: string; note?: string; thumb?: Blob }): Promise<LibraryAsset>;
+    update(id: string, patch: { name?: string; note?: string }): Promise<LibraryAsset>;
+    remove(id: string): Promise<void>;
+    /** copy one into a film */
+    use(projectId: string, id: string): Promise<UserAsset>;
+  };
+  /** pages with their narration lines and times; null until the script exists */
+  timeline(id: string): Promise<Timeline | null>;
+  /** full-resolution frames of the film at `times`, as project-relative paths (from the mp4 when current, else live) */
+  frames(id: string, times: number[]): Promise<string[]>;
+  /** render the finished film to mp4 */
+  export(id: string): Promise<boolean>;
+  /** the film edited by hand (editor/): a draft beside the film, saved as a version; absent where a host can't edit */
+  edit?: EditApi;
+  /** the page the exported film opens on (its first frame); null: the first page. False while the film is being made.
+   *  Absent where a host can't set it */
+  setCover?(id: string, page: string | null): Promise<boolean>;
+  /** a picture of the user's own as that first frame (JPEG, PNG or WebP): its file in the project; throws when refused */
+  setCoverImage?(id: string, file: File): Promise<string>;
+  /** replay after `since`, then live; returns unsubscribe */
+  subscribe(id: string, since: number, onEvent: (e: LoggedEvent) => void, onState?: (s: 'open' | 'reconnecting') => void): () => void;
+  /** where a narrator's sample can be played */
+  voicePreviewUrl(v: Voice): string;
+  /** show a file in Finder / Explorer — the desktop app only */
+  reveal?(file: string): Promise<void>;
+  /** choose a folder with the system dialog (starting at `current`); undefined when dismissed — the desktop app only */
+  pickFolder?(current?: string): Promise<string | undefined>;
+  /** a URL for a file inside the project (preview player, snapshot, video) */
+  fileUrl(p: ProjectView, rel: string): string;
+  /** set by a hosted service (Promptreel Cloud): it runs the models and voices, so the panel leaves out settings, the
+   * model choice and voices it cannot use, and shows the account instead */
+  hosted?: Hosted;
+}
+
+/** a page's text and its base (what an edit is made against) */
+export interface EditPageSource { base: string; source: string }
+/** a version of the film, numbered from the first; newest first in a list */
+export interface EditVersion { n: number; kind: 'step' | 'edit' | 'restore'; label: string | null; at: string }
+export interface EditApi {
+  /** whether the film can be edited now, the draft's pages, the film's pages, and where the edit-mode preview is
+   *  (`${previewUrl}index.html`; ends with '/') */
+  info(id: string): Promise<{ editable: boolean; why: string | null; draft: { pages: string[] } | null; pages: string[]; previewUrl: string }>;
+  page(id: string, page: string): Promise<EditPageSource>;
+  /** the page as edited, made against `base`, into the draft; `{ stale }`: the page changed since, with its base now */
+  put(id: string, page: string, b: { base: string; source: string; did: { kind: string; words?: string }[] }): Promise<EditPageSource | { stale: string }>;
+  save(id: string, label?: string): Promise<{ pages: string[]; version?: EditVersion }>;
+  drop(id: string): Promise<unknown>;
+  versions(id: string): Promise<EditVersion[]>;
+  /** version `n` put back as the film, kept as a new version */
+  restore(id: string, n: number): Promise<{ version: EditVersion }>;
+}
+
+/** a brand's files, as the attach menu offers them: `kind` 'logo', 'logo-dark', 'mark', 'icon' or 'image'; `thumb` a
+ *  small picture's URL */
+export interface LibraryGroup { brand: { id: string; name: string }; items: { id: string; name: string; kind: string; thumb: string }[] }
+
+export interface Hosted {
+  /** the signed-in account, shown in the top bar */
+  email?: string;
+  signOut(): void;
+  /** the account's credits, shown in the top bar and linking to where they are managed; absent: no billing */
+  credits?: {
+    read(): Promise<{ available: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string;
+    /** the credits one film has spent so far, shown instead of what it cost in money, and what its go-ahead needs in the
+     * balance (a storyboard waiting for it says so before the button is pressed); null when nothing is metered. `cost`:
+     * what the film cost the service in US dollars, given only to its admins, to trace costs */
+    spent?(project: string): Promise<{ spent: number; quote?: number; goAhead?: number; cost?: number } | null>;
+  };
+  /** what the person does in the workbench (lib/track.ts): a short name and a few small plain fields, never what was
+   *  typed; absent: nothing is told to anyone */
+  track?(name: string, props: Record<string, string | number | boolean>): void;
+  /** a change is about to be written to the film: its workspace opened ahead of the message (a hosted service puts it
+   *  away while the film rests, and opening it again takes a while). Fire and forget; absent: nothing to open */
+  warm?(project: string): void;
+}
+
+/** what a hosted service refused for want of credits: a failed call carries `credits` (what it needed, what was there) */
+export function shortOf(e: unknown): { needed: number; available: number } | undefined {
+  const c = (e as { credits?: { needed?: unknown; available?: unknown } } | null)?.credits;
+  return c && typeof c.needed === 'number' && typeof c.available === 'number' ? { needed: c.needed, available: c.available } : undefined;
+}
+
+/** a small copy's extension, from its type (a browser without a WebP encoder makes a PNG) */
+const thumbExt = (b: Blob) => (b.type === 'image/png' ? 'png' : b.type === 'image/jpeg' ? 'jpg' : 'webp');
+
+class HttpError extends Error { constructor(msg: string, readonly status: number, readonly base?: string) { super(msg); } }
+
+async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const init: RequestInit = { method, credentials: 'same-origin', headers: {} };
+  if (body instanceof FormData) init.body = body;
+  else if (body !== undefined) { init.body = JSON.stringify(body); (init.headers as Record<string, string>)['content-type'] = 'application/json'; }
+  const res = await fetch(url, init);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new HttpError((data as { error?: string }).error || t('common.requestFailed', { status: res.status }), res.status, (data as { base?: string }).base);
+  return data as T;
+}
+
+export const httpClient: StudioClient = {
+  settings: () => call('GET', '/api/settings'),
+  updateSettings: (patch) => call('PUT', '/api/settings', patch),
+  providers: () => call<ProviderSpec[]>('GET', '/api/providers'),
+  env: () => call('GET', '/api/env'),
+  styles: () => call('GET', '/api/styles'),
+  models: () => call('GET', '/api/models'),
+  voices: () => call('GET', '/api/voices'),
+  addVoice: (input) => call('POST', '/api/voices', input),
+  projects: () => call('GET', '/api/projects'),
+  project: (id) => call('GET', `/api/projects/${id}`),
+  createProject: (input, files, assets) => {
+    const form = new FormData();
+    form.set('input', JSON.stringify(input));
+    for (const f of files) form.append('materials', f, f.name);
+    // each picture's small copy and note, matched to it by position: an empty part where it has none (an SVG's copy)
+    for (const a of assets ?? []) {
+      form.append('assets', a.file, a.file.name);
+      form.append('assetThumbs', a.thumb ?? new Blob([]), a.thumb ? `thumb.${thumbExt(a.thumb)}` : 'none');
+      form.append('assetNotes', a.note ?? '');
+    }
+    return call('POST', '/api/projects', form);
+  },
+  start: async (id) => { await call('POST', `/api/projects/${id}/start`); },
+  approve: async (id, feedback, o) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback, ...(o?.waited ? { waited: o.waited } : {}) })).ok,
+  redrawPicture: async (id, picture, note) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/picture`, { picture, note })).ok,
+  stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
+  deleteProject: async (id) => { await call('DELETE', `/api/projects/${id}`); },
+  moveProject: async (id, group) => { await call('PATCH', `/api/projects/${id}`, { group }); },
+  timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
+  export: async (id) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/export`)).ok,
+  setCover: async (id, page) => (await call<{ ok: boolean }>('PUT', `/api/projects/${id}/cover`, { page })).ok,
+  setCoverImage: async (id, file) => { const f = new FormData(); f.append('file', file); return (await call<{ image: string }>('PUT', `/api/projects/${id}/cover/image`, f)).image; },
+  edit: {
+    info: (id) => call('GET', `/api/projects/${id}/edit`),
+    page: (id, page) => call('GET', `/api/projects/${id}/edit/pages/${encodeURIComponent(page)}`),
+    put: async (id, page, b) => {
+      try { return await call<EditPageSource>('PUT', `/api/projects/${id}/edit/pages/${encodeURIComponent(page)}`, b); } catch (e) {
+        if (e instanceof HttpError && e.status === 409 && e.base) return { stale: e.base };
+        throw e;
+      }
+    },
+    save: (id, label) => call('POST', `/api/projects/${id}/edit/save`, label ? { label } : {}),
+    drop: (id) => call('DELETE', `/api/projects/${id}/edit`),
+    versions: async (id) => (await call<{ versions: EditVersion[] }>('GET', `/api/projects/${id}/versions`)).versions,
+    restore: (id, n) => call('POST', `/api/projects/${id}/versions/${n}/restore`),
+  },
+  frames: async (id, times) => (await call<{ paths: string[] }>('GET', `/api/projects/${id}/frames?t=${times.map((t) => t.toFixed(1)).join(',')}`)).paths,
+  say: async (id, text, refs) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text, refs })).ok,
+  // the manifest's list, or the manifest itself ({ assets })
+  assets: async (id) => { const r = await call<UserAsset[] | { assets: UserAsset[] }>('GET', `/api/projects/${id}/assets`); return Array.isArray(r) ? r : r.assets ?? []; },
+  addAsset: (id, file, o) => {
+    const f = new FormData();
+    f.append('file', file, file.name);
+    if (o?.thumb) f.append('thumb', o.thumb, `thumb.${thumbExt(o.thumb)}`);
+    if (o?.name) f.append('name', o.name);
+    if (o?.note) f.append('note', o.note);
+    return call<UserAsset>('POST', `/api/projects/${id}/assets`, f);
+  },
+  updateAsset: (id, file, patch) => call<UserAsset>('PATCH', `/api/projects/${id}/assets/${encodeURIComponent(file)}`, patch),
+  removeAsset: async (id, file) => { await call('DELETE', `/api/projects/${id}/assets/${encodeURIComponent(file)}`); },
+  attach: async (id, file) => { const f = new FormData(); f.append('file', file); return call<UserRef>('POST', `/api/projects/${id}/attach`, f); },
+  subscribe(id, since, onEvent, onState) {
+    // A browser gives one host six connections, and each open stream holds one: a few Studio tabs left open would
+    // starve the rest (images, the player) of any. So only the tab being looked at keeps its stream; a hidden tab
+    // lets go and, when it is shown again, picks up from the last event it saw.
+    let last = since, es: EventSource | undefined, closed = false;
+    const open = () => {
+      if (closed || es) return;
+      es = new EventSource(`/api/projects/${id}/events?since=${Math.floor(last)}`);
+      es.addEventListener('studio', (m) => { const e = JSON.parse((m as MessageEvent).data) as LoggedEvent; if (e.seq > last) { last = e.seq; onEvent(e); } });
+      es.onopen = () => onState?.('open');
+      es.onerror = () => onState?.('reconnecting');   // EventSource reconnects with Last-Event-ID by itself
+    };
+    const close = () => { es?.close(); es = undefined; };
+    const vis = () => (document.hidden ? close() : open());
+    if (!document.hidden) open();
+    document.addEventListener('visibilitychange', vis);
+    return () => { closed = true; close(); document.removeEventListener('visibilitychange', vis); };
+  },
+  voicePreviewUrl: (v) => v.previewUrl || `/api/voices/${v.provider}/${encodeURIComponent(v.id)}/preview`,
+  fileUrl: (p, rel) => p.previewBase + rel.split('/').map(encodeURIComponent).join('/'),
+};
+
+declare global { interface Window { studioBridge?: StudioClient & { platform?: string } } }
+
+/** the desktop app's bridge when present, else the local HTTP server */
+export const client: StudioClient = (typeof window !== 'undefined' && window.studioBridge) || httpClient;
+export const hosted = client.hosted;
+/** an exported mp4 to save, named after the film: `?download=` asks the server to send it as an attachment, since a
+ * browser ignores <a download> for a file on another origin (a hosted service's previews) and plays it instead */
+export const downloadUrl = (p: ProjectView, rel: string, noSubs = false) => {
+  const name = `${(p.title || 'promptreel').replace(/[\\/:*?"<>|]+/g, ' ').trim()}${noSubs ? '-nosubs' : ''}.mp4`;
+  return `${client.fileUrl(p, rel)}?download=${encodeURIComponent(name)}`;
+};

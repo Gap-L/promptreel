@@ -1,0 +1,39 @@
+{
+  "name": "@promptreel/voice",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Narration for Promptreel: Volcengine TTS 2.0 and ElevenLabs, cut into cues with per-character timing.",
+  "license": "AGPL-3.0-only",
+  "author": "Sitor Team (https://sitor.ai)",
+  "homepage": "https://github.com/sitor-ai/promptreel#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sitor-ai/promptreel.git",
+    "directory": "packages/voice"
+  },
+  "bugs": {
+    "url": "https://github.com/sitor-ai/promptreel/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "samples"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@promptreel/engine": "workspace:*"
+  }
+}
