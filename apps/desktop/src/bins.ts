@@ -23,4 +23,6 @@ try {
     fs.chmodSync(f, 0o755);
   }
   process.env.PATH = dir + path.delimiter + (process.env.PATH || '');
+  // the shell sandbox hides the home folder; this one directory under it is the app's own node launcher
+  process.env.PROMPTREEL_NODE_SHIM = dir;
 } catch {}

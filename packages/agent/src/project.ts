@@ -326,10 +326,12 @@ export class Project {
   private gitAsync(args: string[]) { return gitAsync(this.dir, args, childEnv()); }
   /** an empty history: the repository and its author, nothing committed */
   initRepo() {
-    if (noHistory() || fs.existsSync(this.file('.git'))) return;
-    this.git(['init', '-q', '-b', 'main']);
-    this.git(['config', 'user.name', 'Promptreel']);
-    this.git(['config', 'user.email', 'studio@promptreel.local']);
+    if (noHistory()) return;
+    if (!fs.existsSync(this.file('.git'))) this.git(['init', '-q', '-b', 'main']);
+    // a repo from an older studio (or one a shell made) may have no author: give its commits the studio's without
+    // replacing an author already set there. CI has no global git identity, so an unset one would make commit() return null.
+    if (this.git(['config', '--local', '--get', 'user.name']).status !== 0) this.git(['config', 'user.name', 'Promptreel']);
+    if (this.git(['config', '--local', '--get', 'user.email']).status !== 0) this.git(['config', 'user.email', 'studio@promptreel.local']);
   }
   initHistory() {
     if (noHistory()) return;

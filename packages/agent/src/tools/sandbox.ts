@@ -46,12 +46,16 @@ function readable(): string[] {
   if (ca) out.add(ca);
   const res = (process as { resourcesPath?: string }).resourcesPath;
   if (res) out.add(real(res) ?? res);
-  // the programs on PATH (the desktop app puts its `node` launcher in its data folder), but never a whole home folder
+  // the programs on PATH, but never a folder under home: the agent must not read the user's home. (Node itself, when a
+  // version manager keeps it there, is added above from process.execPath.)
   const home = real(os.homedir()) ?? os.homedir();
   for (const d of (process.env.PATH || '').split(path.delimiter)) {
     const r = d && real(d);
-    if (r && path.isAbsolute(r) && !inside(home, r)) out.add(r);
+    if (r && path.isAbsolute(r) && !inside(r, home)) out.add(r);
   }
+  // the desktop app's own `node` launcher sits in its data folder under home: allow that one folder, never the home around it
+  const shim = process.env.PROMPTREEL_NODE_SHIM && real(process.env.PROMPTREEL_NODE_SHIM);
+  if (shim) out.add(shim);
   return [...out];
 }
 
