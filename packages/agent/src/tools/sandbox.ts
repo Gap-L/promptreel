@@ -27,8 +27,9 @@ const inside = (p: string, dir: string) => p === dir || p.startsWith(dir.endsWit
  *  node_modules folders further up), and the Node that runs them (a version manager or the app keeps it in home).
  *  The installed engine's own folders, never where the project's engine/ and engine_modules/ links point: the shell
  *  can repoint those (at the folder of every account's projects), and that folder would be let back in. */
-function readable(): string[] {
+function readable(extra: string[] = []): string[] {
   const out = new Set<string>();
+  for (const p of extra) { const r = real(p) ?? p; if (r) out.add(r); }
   for (const dir of [ENGINE_DIR, engineModulesDir()]) {
     const r = real(dir);
     if (!r) continue;
@@ -84,7 +85,7 @@ const nonet = () => process.env.PROMPTREEL_SANDBOX_NONET === '1';
 const required = () => process.env.PROMPTREEL_SANDBOX_REQUIRED === '1';
 
 /** the command that runs `cmd argv` confined to `root` (the same command where no sandbox is available) */
-export function confine(root: string, cmd: string, argv: string[], platform: NodeJS.Platform = process.platform): [string, string[]] {
+export function confine(root: string, cmd: string, argv: string[], platform: NodeJS.Platform = process.platform, read: string[] = []): [string, string[]] {
   const r = real(root) ?? root;
   if (platform === 'darwin') {
     const hidden = [...new Set(['/Users', real(os.homedir()) ?? os.homedir(), '/Volumes', '/private/tmp', '/private/var/tmp', ...extraHidden().map((d) => real(d) ?? d)])];
@@ -93,21 +94,22 @@ export function confine(root: string, cmd: string, argv: string[], platform: Nod
       '(allow default)',
       ...(nonet() ? ['(deny network*)'] : []),
       `(deny file-read-data file-write* ${hidden.map((d) => `(subpath ${q(d)})`).join(' ')})`,
-      `(allow file-read-data ${readable().map((d) => `(subpath ${q(d)})`).join(' ')})`,
+      `(allow file-read-data ${readable(read).map((d) => `(subpath ${q(d)})`).join(' ')})`,
       `(allow file-read-data file-write* (subpath ${q(r)}))`,
       `(deny file-read-data file-write* (subpath ${q(path.join(r, '.studio'))}))`,   // the studio's record of the run
       `(deny file-write* (subpath ${q(path.join(r, '.git'))}))`,   // its hooks and config run in the studio's own git
     ].join('\n');
     return ['/usr/bin/sandbox-exec', ['-p', profile, cmd, ...argv]];
   }
-  if (platform === 'linux' && hasBwrap()) return bwrapCommand(r, cmd, argv);
+  if (platform === 'linux' && hasBwrap()) return bwrapCommand(r, cmd, argv, read);
   if (required() || nonet()) throw new Error('PROMPTREEL_SANDBOX_REQUIRED is set (PROMPTREEL_SANDBOX_NONET requires it too), but there is no sandbox here (bubblewrap on Linux, sandbox-exec on macOS)');
   return [cmd, argv];
 }
 
 /** the bubblewrap command for `cmd argv` confined to the real folder `r` (exported for its tests: confine() picks it on Linux) */
-export function bwrapCommand(r: string, cmd: string, argv: string[]): [string, string[]] {
+export function bwrapCommand(r: string, cmd: string, argv: string[], read: string[] = []): [string, string[]] {
   const hidden = [...new Set([os.homedir(), ...extraHidden()])].filter((d) => d !== '/' && fs.existsSync(d));
+  const readablePaths = readable(read);
   const filter = seccompFile();
   const args = [
     // its own user namespace, in which no other can be made, and no capabilities in it
@@ -117,7 +119,7 @@ export function bwrapCommand(r: string, cmd: string, argv: string[]): [string, s
     ...(nonet() ? ['--unshare-net', '--unshare-pid', '--unshare-ipc', '--new-session', '--tmpfs', '/dev/shm'] : []),
     ...hidden.flatMap((d) => ['--tmpfs', d]),
     // what the project needs from a hidden folder comes back: the project itself (writable), the engine and Node
-    ...readable().filter((d) => hidden.some((h) => inside(d, h))).flatMap((d) => ['--ro-bind', d, d]),
+    ...readablePaths.filter((d) => hidden.some((h) => inside(d, h))).flatMap((d) => ['--ro-bind', d, d]),
     '--bind', r, r, ...(fs.existsSync(path.join(r, '.studio')) ? ['--tmpfs', path.join(r, '.studio')] : []),   // the studio's record of the run
     ...(fs.existsSync(path.join(r, '.git')) ? ['--ro-bind', path.join(r, '.git'), path.join(r, '.git')] : []),   // its hooks and config run in the studio's own git
     '--chdir', r, '--die-with-parent', cmd, ...argv,

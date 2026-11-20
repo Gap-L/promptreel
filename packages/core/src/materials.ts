@@ -69,7 +69,11 @@ const isEntry = (f: unknown): f is PreparedMaterial => {
 export async function parseInChild(dir: string, lang: MaterialLang, script = fileURLToPath(new URL('./materials-child.js', import.meta.url))): Promise<{ files: PreparedMaterial[] }> {
   // loaded here, not at the top: the child imports this module and needs none of the agent
   const { confinedCmd, nodeEnv } = await import('@promptreel/agent');
-  const [cmd, argv] = confinedCmd(dir, process.execPath, [script, lang]);
+  // the child lives in this package's dist/, outside the project: the sandbox must let it (and its modules) in, or it
+  // cannot even start. Under a workspace these are under a hidden home; the parser still runs confined to `dir`.
+  const pkg = path.dirname(script);
+  const read = [pkg, path.join(pkg, '..', 'node_modules'), path.join(pkg, '..', '..', 'node_modules')].filter((p) => fs.existsSync(p));
+  const [cmd, argv] = confinedCmd(dir, process.execPath, [script, lang], read);
   const out = await new Promise<string>((ok, fail) => execFile(cmd, argv, { cwd: dir, env: nodeEnv(), encoding: 'utf8', timeout: 300_000, maxBuffer: 16 << 20 },
     (e, so, se) => (e ? fail(new Error(`the documents could not be read: ${String(se || e.message).trim().slice(-1000)}`)) : ok(String(so)))));
   let r: { files?: unknown } | undefined;

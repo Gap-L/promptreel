@@ -81,8 +81,8 @@ export async function cutFrame(dir: string, from: OpenFile, before: string[], af
 
 /** how a host runs a child that reads what the agent made (an engine tool, ffmpeg, a document parser): inside the
  *  shell's sandbox when the network is taken away (the hosted sandbox), with no network and only `dir` writable */
-export const confinedCmd = (dir: string, cmd: string, args: string[]): [string, string[]] =>
-  process.env.PROMPTREEL_SANDBOX_NONET === '1' ? confine(dir, cmd, args) : [cmd, args];
+export const confinedCmd = (dir: string, cmd: string, args: string[], read: string[] = []): [string, string[]] =>
+  process.env.PROMPTREEL_SANDBOX_NONET === '1' ? confine(dir, cmd, args, process.platform, read) : [cmd, args];
 export const engineCmd = (dir: string, args: string[]): [string, string[]] => confinedCmd(dir, process.execPath, args);
 /** confinedCmd for a package that cannot import this one (voice's narrate), with the environment a child gets */
 export const childCmd: ChildCmd = (dir, cmd, argv) => { const [c, a] = confinedCmd(dir, cmd, argv); return { cmd: c, argv: a, env: nodeEnv() }; };
@@ -332,6 +332,8 @@ export class Project {
     // replacing an author already set there. CI has no global git identity, so an unset one would make commit() return null.
     if (this.git(['config', '--local', '--get', 'user.name']).status !== 0) this.git(['config', 'user.name', 'Promptreel']);
     if (this.git(['config', '--local', '--get', 'user.email']).status !== 0) this.git(['config', 'user.email', 'studio@promptreel.local']);
+    // a project's versions are its files as written: never let a Windows checkout turn their LF into CRLF
+    this.git(['config', 'core.autocrlf', 'false']);
   }
   initHistory() {
     if (noHistory()) return;
